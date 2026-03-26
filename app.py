@@ -56,34 +56,43 @@ if uploaded_file is not None:
                     # 1. Inisialisasi Class
                     forecaster = SalesForecasting(model_list=selected_models)
                     
-                    # 2. Persiapan Data untuk Model (MENGHINDARI ERROR DATETIME)
-                    # Kita buat copy agar data asli tetap utuh untuk plotting
-                    df_model = df.copy()
+                    # 2. Persiapan Data (Explicit X dan y)
+                    # Kita harus memisahkan target (y) dari fitur (X)
+                    # karena XGBoost sensitif terhadap input string sebagai label.
                     
-                    # Simpan index tanggal untuk keperluan plotting nanti
-                    train_size = int(len(df_model) * 0.8)
+                    train_size = int(len(df) * 0.8)
+                    train_df = df.iloc[:train_size]
+                    test_df = df.iloc[train_size:]
+
+                    # Buat X (fitur) dengan menghapus kolom tanggal dan target
+                    X_train = train_df.drop(columns=[date_col, value_col])
+                    y_train = train_df[value_col]
                     
-                    # Pisahkan fitur (X) dan target (y) atau hapus kolom non-numerik
-                    # Model XGBoost/RandomForest tidak bisa menerima kolom datetime
-                    train_data = df_model.iloc[:train_size].drop(columns=[date_col])
-                    test_data = df_model.iloc[train_size:].drop(columns=[date_col])
-                    
+                    X_test = test_df.drop(columns=[date_col, value_col])
+                    y_test = test_df[value_col]
+
+                    # Jika X_train kosong (misal hanya ada 2 kolom), buat fitur dummy 
+                    # karena model ML butuh minimal 1 fitur pendukung.
+                    if X_train.empty:
+                        X_train['dummy'] = np.arange(len(X_train))
+                        X_test['dummy'] = np.arange(len(X_train), len(X_train) + len(X_test))
+
                     # 3. EKSEKUSI FIT
-                    # Mengirim data yang SUDAH BERSIH dari kolom tanggal
+                    # Kita kirimkan X dan y secara terpisah agar XGBoost tidak bingung
                     try:
-                        forecaster.fit(train_data, value_col) 
-                    except Exception as fit_err:
-                        # Jika fit gagal, mungkin ia butuh index sebagai tanggal
-                        # Kita coba kirim data dengan tanggal sebagai index
-                        train_idx = df_model.iloc[:train_size].set_index(date_col)
-                        forecaster.fit(train_idx, value_col)
+                        forecaster.fit(X_train, y_train) 
+                    except TypeError:
+                        # Jika fit() di modeling.py Anda didesain menerima (df, target_name)
+                        # Kita gunakan data yang sudah dibersihkan dari kolom tanggal
+                        clean_train = train_df.drop(columns=[date_col])
+                        forecaster.fit(clean_train, value_col)
                     
                     # 4. PREDICT
                     try:
-                        forecaster.predict(test_data)
+                        forecaster.predict(X_test)
                     except:
-                        test_idx = df_model.iloc[train_size:].set_index(date_col)
-                        forecaster.predict(test_idx)
+                        clean_test = test_df.drop(columns=[date_col])
+                        forecaster.predict(clean_test)
                     
                     st.success("✅ Prediksi Selesai!")
 
@@ -105,11 +114,10 @@ if uploaded_file is not None:
                                     fig_res = forecaster.plot_results(model_list=[model_name])
                                     st.pyplot(fig_res)
                                 except:
-                                    # Fallback jika plot internal gagal
                                     st.line_chart(m.get('predictions'))
                     
             except Exception as e:
                 st.error(f"Terjadi kesalahan eksekusi: {e}")
-                st.info("Saran: Kolom tanggal otomatis dihapus sebelum masuk ke model XGBoost.")
+                st.info("Pastikan CSV Anda memiliki kolom fitur lain selain tanggal dan sales jika menggunakan XGBoost.")
 else:
     st.info("Silakan unggah file CSV di sidebar.")
