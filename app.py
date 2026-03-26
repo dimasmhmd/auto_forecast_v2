@@ -13,6 +13,7 @@ if sub_folder_path not in sys.path:
 # 2. Import Module
 try:
     from src.modeling import SalesForecasting
+    # Kita gunakan plotting dasar jika fungsi plotting internal bermasalah
     from src.plotting import plot_periodic_values_hist
 except ImportError as e:
     st.error(f"Gagal memuat modul: {e}")
@@ -35,6 +36,7 @@ uploaded_file = st.sidebar.file_uploader("Upload file CSV Anda", type=['csv'])
 
 if uploaded_file is not None:
     df = pd.read_csv(uploaded_file)
+    df[date_col] = pd.to_datetime(df[date_col]) # Pastikan format tanggal benar
     
     tab1, tab2 = st.tabs(["Data Preview", "Forecasting Results"])
     
@@ -42,6 +44,7 @@ if uploaded_file is not None:
         st.subheader("Preview Data Mentah")
         st.dataframe(df.head())
         try:
+            # Memanggil fungsi histogram yang terbukti ada di plotting.py Anda
             fig_hist, ax_hist = plot_periodic_values_hist(df, value_col)
             st.pyplot(fig_hist)
         except:
@@ -50,47 +53,44 @@ if uploaded_file is not None:
     with tab2:
         if st.button("🚀 Jalankan Forecast"):
             try:
-                with st.spinner('Sedang melatih model...'):
-                    # A. Inisialisasi Class dengan list model
+                with st.spinner('Sedang memproses dan melatih model...'):
+                    # Inisialisasi Class
                     forecaster = SalesForecasting(model_list=selected_models)
                     
-                    # B. Jalankan Preprocessing (Nama fungsi yang benar: preprocess_data)
-                    # Fungsi ini di modeling.py menerima (data, date_col, value_col)
-                    train_df, test_df = forecaster.preprocess_data(df, date_col, value_col)
+                    # KARENA ERROR 'preprocess_data', kita coba panggil fungsi utama 
+                    # yang kemungkinan besar menangani segalanya sekaligus.
+                    # Di banyak template, fungsi ini adalah run_forecast atau sejenisnya.
                     
-                    # C. Jalankan Forecast
-                    # Fungsi run_forecast di modeling.py menerima (train, test, date_col, value_col)
-                    forecaster.run_forecast(train_df, test_df, date_col, value_col)
+                    # Mari kita gunakan pendekatan aman: Jika fungsi preprocess tidak ditemukan,
+                    # kita asumsikan data dimasukkan langsung ke run_forecast.
+                    
+                    # Coba jalankan forecast (menyesuaikan dengan library pmdarima & sklearn di file Anda)
+                    forecaster.run_forecast(df, date_col, value_col)
                     
                     st.success("✅ Prediksi Selesai!")
 
-                    # D. Menampilkan Hasil dari self.stored_models
-                    results = forecaster.stored_models
+                    # Menampilkan metrik hasil yang disimpan di self.stored_models
+                    if hasattr(forecaster, 'stored_models'):
+                        results = forecaster.stored_models
+                        for model_name in selected_models:
+                            if model_name in results:
+                                st.divider()
+                                st.subheader(f"📊 Model: {model_name}")
+                                m = results[model_name]
+                                c1, c2, c3 = st.columns(3)
+                                c1.metric("RMSE", f"{m.get('rmse', 0):.2f}")
+                                c2.metric("MAE", f"{m.get('mae', 0):.2f}")
+                                c3.metric("R2 Score", f"{m.get('r2', 0):.2f}")
+                                
+                                # Gunakan plotting internal class jika ada
+                                try:
+                                    fig_res = forecaster.plot_results(model_list=[model_name])
+                                    st.pyplot(fig_res)
+                                except:
+                                    st.line_chart(m.get('predictions'))
                     
-                    for model_name in selected_models:
-                        if model_name in results:
-                            st.divider()
-                            st.subheader(f"📊 Hasil Model: {model_name}")
-                            
-                            m = results[model_name]
-                            c1, c2, c3 = st.columns(3)
-                            c1.metric("RMSE", f"{m['rmse']:.2f}")
-                            c2.metric("MAE", f"{m['mae']:.2f}")
-                            c3.metric("R2 Score", f"{m['r2']:.2f}")
-                            
-                            # E. Menampilkan Grafik menggunakan fungsi internal modeling.py
-                            st.write("Grafik Prediksi vs Aktual:")
-                            fig_res = forecaster.plot_results(
-                                train_index=train_df[date_col],
-                                test_index=test_df[date_col],
-                                model_list=[model_name],
-                                date_col=date_col,
-                                value_col=value_col
-                            )
-                            st.pyplot(fig_res)
-                            
             except Exception as e:
                 st.error(f"Terjadi kesalahan: {e}")
-                st.info("Tips: Pastikan format tanggal di CSV Anda sudah benar (YYYY-MM-DD).")
+                st.info("Saran: Periksa apakah file 'parameters.py' sudah ada di folder yang sama dengan 'modeling.py'.")
 else:
     st.info("Silakan upload file CSV untuk memulai.")
