@@ -8,3 +8,4 @@ statsmodels
 matplotlib
 setuptools>=60.0.0
 pmdarima>=2.0.0
+seaborn
