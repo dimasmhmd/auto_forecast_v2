@@ -9,3 +9,5 @@ statsmodels==0.14.0
 xgboost==1.7.6
 streamlit
 tensorflow
+pmdarima
+setuptools
