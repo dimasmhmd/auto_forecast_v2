@@ -4,23 +4,21 @@ import sys
 import os
 import matplotlib.pyplot as plt
 
-# 1. Penanganan Path agar folder 'src' terbaca
+# 1. Penanganan Path (Sesuaikan dengan struktur folder Anda)
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sub_folder_path = os.path.join(current_dir, "auto_forecast")
 if sub_folder_path not in sys.path:
     sys.path.append(sub_folder_path)
 
-# 2. Import Module dengan pengecekan fungsi yang tersedia
+# 2. Import Module
 try:
     from src.modeling import SalesForecasting
-    # Berdasarkan file plotting.py Anda, kita gunakan fungsi yang tersedia:
     from src.plotting import plot_periodic_values_hist
 except ImportError as e:
     st.error(f"Gagal memuat modul: {e}")
     st.stop()
 
 st.set_page_config(page_title="Auto Forecast Tool", layout="wide")
-
 st.title("📈 Auto Sales Forecasting Dashboard")
 
 # --- SIDEBAR: KONFIGURASI ---
@@ -31,7 +29,6 @@ value_col = st.sidebar.text_input("Nama Kolom Nilai (Sales)", "sales")
 st.sidebar.header("2. Parameter Model")
 model_options = ['LinearRegression', 'RandomForest', 'XGBoost', 'LSTM', 'ARIMA']
 selected_models = st.sidebar.multiselect("Pilih Model", model_options, default=['XGBoost'])
-horizon = st.sidebar.number_input("Horizon Prediksi (Bulan)", min_value=1, max_value=24, value=12)
 
 # --- MAIN PAGE: UPLOAD ---
 uploaded_file = st.sidebar.file_uploader("Upload file CSV Anda", type=['csv'])
@@ -44,31 +41,51 @@ if uploaded_file is not None:
     with tab1:
         st.subheader("Preview Data Mentah")
         st.dataframe(df.head())
-        
-        # Menggunakan fungsi dari plotting.py Anda
-        st.write("Distribusi Data:")
+        # Menampilkan histogram dari plotting.py
         fig_hist, ax_hist = plot_periodic_values_hist(df, value_col)
         st.pyplot(fig_hist)
 
     with tab2:
         if st.button("🚀 Jalankan Forecast"):
             try:
-                with st.spinner('Sedang melatih model...'):
-                    # Inisialisasi Class (Tanpa argumen model_list di __init__ sesuai modeling.py)
-                    # Catatan: modeling.py Anda membutuhkan model_list saat inisialisasi
+                with st.spinner('Sedang melatih model dan menghitung prediksi...'):
+                    # A. Inisialisasi Class
                     forecaster = SalesForecasting(model_list=selected_models)
                     
-                    # Kita asumsikan data dimasukkan ke object atau diproses di pre_process
-                    # Berdasarkan modeling.py, Anda perlu menyesuaikan cara input data ke class ini
-                    # Jika modeling.py Anda memerlukan data di awal, pastikan init-nya sesuai.
+                    # B. Jalankan Proses (Sesuaikan dengan alur modeling.py)
+                    # Kita asumsikan data dimasukkan melalui fungsi yang ada di class tersebut
+                    # Catatan: Pastikan method di bawah ini sesuai dengan isi modeling.py Anda
+                    forecaster.data = df
+                    forecaster.date_col = date_col
+                    forecaster.value_col = value_col
+                    
+                    forecaster.pre_process()
+                    forecaster.run_forecast() # Jalankan training & prediksi
                     
                     st.success("✅ Prediksi Selesai!")
-                    st.info("Catatan: Visualisasi forecast menggunakan line chart standar Streamlit.")
+
+                    # C. MENAMPILKAN HASIL (PENTING)
+                    # modeling.py menyimpan hasil di self.stored_models
+                    results = forecaster.stored_models
                     
-                    # Simulasi penampilan hasil (Ganti dengan logik forecaster.run_forecast Anda)
-                    # Karena modeling.py sangat kompleks, pastikan return value-nya sesuai.
-                    
+                    for model_name in selected_models:
+                        if model_name in results:
+                            st.subheader(f"Hasil Model: {model_name}")
+                            
+                            # Menampilkan Metrik (RMSE, MAE, R2)
+                            m = results[model_name]
+                            col1, col2, col3 = st.columns(3)
+                            col1.metric("RMSE", f"{m['rmse']:.2f}")
+                            col2.metric("MAE", f"{m['mae']:.2f}")
+                            col3.metric("R2 Score", f"{m['r2']:.2f}")
+                            
+                            # Menampilkan Grafik (Menggunakan fungsi plot internal modeling.py)
+                            st.write("Grafik Prediksi vs Aktual:")
+                            fig_res = forecaster.plot_results(model_list=[model_name])
+                            st.pyplot(fig_res)
+                            
             except Exception as e:
-                st.error(f"Detail Error: {e}")
+                st.error(f"Terjadi kesalahan: {e}")
+                st.info("Pastikan nama kolom di sidebar sama persis dengan yang ada di file CSV.")
 else:
     st.info("Silakan upload file CSV untuk memulai.")
