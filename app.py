@@ -52,30 +52,38 @@ if uploaded_file is not None:
     with tab2:
         if st.button("🚀 Jalankan Forecast"):
             try:
-                with st.spinner('Sedang memproses...'):
+                with st.spinner('Sedang melatih model...'):
                     # 1. Inisialisasi Class
                     forecaster = SalesForecasting(model_list=selected_models)
                     
-                    # 2. Split Data (80/20)
-                    train_size = int(len(df) * 0.8)
-                    train = df.iloc[:train_size]
-                    test = df.iloc[train_size:]
+                    # 2. Persiapan Data untuk Model (MENGHINDARI ERROR DATETIME)
+                    # Kita buat copy agar data asli tetap utuh untuk plotting
+                    df_model = df.copy()
                     
-                    # 3. EKSEKUSI FIT (Hanya 2 argumen data: train dan value_col)
-                    # Karena error mengatakan "3 positional arguments" (termasuk self), 
-                    # maka kita hanya boleh mengirim 2 variabel.
+                    # Simpan index tanggal untuk keperluan plotting nanti
+                    train_size = int(len(df_model) * 0.8)
+                    
+                    # Pisahkan fitur (X) dan target (y) atau hapus kolom non-numerik
+                    # Model XGBoost/RandomForest tidak bisa menerima kolom datetime
+                    train_data = df_model.iloc[:train_size].drop(columns=[date_col])
+                    test_data = df_model.iloc[train_size:].drop(columns=[date_col])
+                    
+                    # 3. EKSEKUSI FIT
+                    # Mengirim data yang SUDAH BERSIH dari kolom tanggal
                     try:
-                        forecaster.fit(train, value_col) 
-                    except TypeError:
-                        # Jika gagal, coba gunakan date_col sebagai argumen kedua
-                        forecaster.fit(train, date_col)
+                        forecaster.fit(train_data, value_col) 
+                    except Exception as fit_err:
+                        # Jika fit gagal, mungkin ia butuh index sebagai tanggal
+                        # Kita coba kirim data dengan tanggal sebagai index
+                        train_idx = df_model.iloc[:train_size].set_index(date_col)
+                        forecaster.fit(train_idx, value_col)
                     
                     # 4. PREDICT
-                    # Mengikuti pola yang sama, coba kirim 2 argumen untuk predict
                     try:
-                        forecaster.predict(test, value_col)
+                        forecaster.predict(test_data)
                     except:
-                        forecaster.predict(test)
+                        test_idx = df_model.iloc[train_size:].set_index(date_col)
+                        forecaster.predict(test_idx)
                     
                     st.success("✅ Prediksi Selesai!")
 
@@ -92,14 +100,16 @@ if uploaded_file is not None:
                                 c2.metric("MAE", f"{m.get('mae', 0):.2f}")
                                 c3.metric("R2 Score", f"{m.get('r2', 0):.2f}")
                                 
-                                # Visualisasi aman
+                                # Visualisasi
                                 try:
                                     fig_res = forecaster.plot_results(model_list=[model_name])
                                     st.pyplot(fig_res)
                                 except:
+                                    # Fallback jika plot internal gagal
                                     st.line_chart(m.get('predictions'))
                     
             except Exception as e:
                 st.error(f"Terjadi kesalahan eksekusi: {e}")
+                st.info("Saran: Kolom tanggal otomatis dihapus sebelum masuk ke model XGBoost.")
 else:
     st.info("Silakan unggah file CSV di sidebar.")
