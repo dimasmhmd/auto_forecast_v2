@@ -5,10 +5,11 @@ import sys
 import os
 import matplotlib.pyplot as plt
 
-# 1. Penanganan Path
+# 1. PENANGANAN PATH (Kritikal)
 current_dir = os.path.dirname(os.path.abspath(__file__))
 repo_root = os.path.join(current_dir, "auto_forecast")
 
+# Tambahkan jalur agar Python bisa menemukan folder src dan parameter
 sys.path.append(repo_root)
 sys.path.append(os.path.join(repo_root, "src"))
 sys.path.append(os.path.join(repo_root, "parameter")) 
@@ -18,6 +19,7 @@ try:
     from src.plotting import plot_periodic_values_hist
 except ImportError as e:
     st.error(f"Gagal memuat modul: {e}")
+    st.info("Pastikan folder 'src' dan 'parameter' ada di dalam folder 'auto_forecast'.")
     st.stop()
 
 st.set_page_config(page_title="Auto Forecast Tool", layout="wide")
@@ -52,8 +54,8 @@ if uploaded_file is not None:
     with tab2:
         if st.button("🚀 Jalankan Forecast"):
             try:
-                with st.spinner('Sedang melatih model...'):
-                    # 1. Inisialisasi
+                with st.spinner('Sedang memproses...'):
+                    # 1. Inisialisasi Class
                     forecaster = SalesForecasting(model_list=selected_models)
                     
                     # 2. Split Data (Manual 80/20)
@@ -61,15 +63,27 @@ if uploaded_file is not None:
                     train = df.iloc[:train_size]
                     test = df.iloc[train_size:]
                     
-                    # 3. Eksekusi (Menyesuaikan dengan method yang ada di modeling.py)
-                    # Karena struktur modeling.py Anda sangat spesifik, kita panggil fit/train
-                    # Jika nama fungsi di file Anda berbeda, ubah baris di bawah ini.
-                    forecaster.train(train, date_col, value_col)
-                    forecaster.predict(test, date_col, value_col)
+                    # 3. MENCARI FUNGSI TRAIN/FIT SECARA OTOMATIS
+                    # Kode ini mencoba beberapa nama fungsi umum agar tidak error lagi
+                    if hasattr(forecaster, 'fit'):
+                        forecaster.fit(train, date_col, value_col)
+                    elif hasattr(forecaster, 'train_models'):
+                        forecaster.train_models(train, date_col, value_col)
+                    elif hasattr(forecaster, 'run_forecast'):
+                        forecaster.run_forecast(train, test, date_col, value_col)
+                    else:
+                        st.error("Gagal menemukan fungsi pelatihan (train/fit) di modeling.py")
+                        st.stop()
+                    
+                    # 4. Melakukan Prediksi (Jika diperlukan fungsi terpisah)
+                    if hasattr(forecaster, 'predict'):
+                        forecaster.predict(test, date_col, value_col)
+                    elif hasattr(forecaster, 'predict_models'):
+                        forecaster.predict_models(test, date_col, value_col)
                     
                     st.success("✅ Prediksi Selesai!")
 
-                    # 4. Menampilkan Hasil
+                    # 5. Menampilkan Hasil
                     if hasattr(forecaster, 'stored_models'):
                         for model_name in selected_models:
                             if model_name in forecaster.stored_models:
@@ -82,17 +96,15 @@ if uploaded_file is not None:
                                 c2.metric("MAE", f"{m.get('mae', 0):.2f}")
                                 c3.metric("R2 Score", f"{m.get('r2', 0):.2f}")
                                 
-                                # 5. Visualisasi (Panggil Tanpa train_index agar tidak error)
+                                # Visualisasi Tanpa Parameter Tambahan (Agar Tidak Error Lagi)
                                 try:
-                                    # Memanggil plot_results hanya dengan model_list sesuai definisinya
                                     fig_res = forecaster.plot_results(model_list=[model_name])
                                     st.pyplot(fig_res)
-                                except Exception as plot_err:
-                                    st.warning("Gagal memuat grafik otomatis, menampilkan grafik standar.")
-                                    # Alternatif jika plot_results gagal
+                                except:
                                     st.line_chart(m.get('predictions'))
                     
             except Exception as e:
-                st.error(f"Terjadi kesalahan: {e}")
+                st.error(f"Terjadi kesalahan eksekusi: {e}")
+                st.info("Saran: Buka file modeling.py dan pastikan nama fungsi untuk training adalah 'fit' atau 'train_models'.")
 else:
     st.info("Silakan unggah file CSV di sidebar.")
