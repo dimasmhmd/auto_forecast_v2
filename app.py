@@ -3,6 +3,11 @@ import pandas as pd
 import sys
 import os
 
+# Menambahkan path ke folder 'auto_forecast' agar folder 'src' di dalamnya terbaca
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sub_folder_path = os.path.join(current_dir, "auto_forecast")
+sys.path.append(sub_folder_path)
+
 # Memastikan folder src terbaca sebagai modul
 sys.path.append(os.getcwd())
 
